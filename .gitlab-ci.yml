@@ -1,0 +1,11 @@
+image: python:3
+
+stages:
+  - test
+
+test_backend:
+  stage: test
+  script:
+    - pip install -r requirements.txt
+    - pip install -r dev_requirements.txt
+    - nosetests -v --with-coverage --cover-erase --cover-package=flask_kit

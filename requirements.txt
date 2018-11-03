@@ -1,0 +1,5 @@
+Cerberus==1.2
+cytoolz==0.9.0.1
+Flask==1.0.2
+Flask-Cors==3.0.6
+flask-talisman==0.6.0
