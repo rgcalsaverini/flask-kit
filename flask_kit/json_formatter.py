@@ -55,7 +55,7 @@ def make_response(resp=None):
     content_type = _text_mime
     has_status = isinstance(resp, tuple) and len(resp) >= 2
 
-    if not resp or (body == '' and not has_status):
+    if resp is None or (body == '' and not has_status):
         status = 204
 
     if not isinstance(body, str):
@@ -67,13 +67,3 @@ def make_response(resp=None):
         'Content-Type': content_type,
         **headers,
     }
-
-
-class JsonFormatter(object):
-    def __init__(self, app):
-        if app:
-            self.init_app(app)
-
-    @classmethod
-    def init_app(cls, app):
-        app.after_request(make_response)

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from dateutil import parser as date_parser
 
-from flask_kit.json_formatter import make_response, JsonFormatter
+from flask_kit.json_formatter import make_response
 
 
 class IsSerializable(object):
@@ -44,6 +44,11 @@ class ResponseCase(unittest.TestCase):
         self.assertEquals(len(response), 3)
         self.assertEquals(response[1], status)
 
+    def assertStatusNot(self, response, status, msg=None):
+        self.assertEquals(type(response), tuple, msg)
+        self.assertEquals(len(response), 3, msg)
+        self.assertNotEquals(response[1], status, msg)
+
     def assertDataEquals(self, response, data):
         self.assertEquals(type(response), tuple)
         self.assertEquals(len(response), 3)
@@ -62,11 +67,12 @@ class FakeApp():
     after_request = MagicMock()
 
 
-class TestExtension(unittest.TestCase):
-    def test_register(self):
-        app = FakeApp()
-        JsonFormatter(app)
-        app.after_request.assert_called_once_with(make_response)
+#
+# class TestExtension(unittest.TestCase):
+#     def test_register(self):
+#         app = FakeApp()
+#         JsonFormatter(app)
+#         app.after_request.assert_called_once_with(make_response)
 
 
 class TestDecorator(ResponseCase):
@@ -84,15 +90,25 @@ class TestDecorator(ResponseCase):
         self.assertDataEquals(resp, payload)
 
     def test_empty(self):
-        resp1 = make_response()
-        resp2 = make_response('')
+        are_empty = {
+            'empty args': make_response(),
+            'empty string': make_response(''),
+            'none': make_response(None),
+        }
 
-        self.assertContentType(resp1, 'text/plain')
-        self.assertStatus(resp1, 204)
-        self.assertDataEquals(resp1, '')
-        self.assertContentType(resp2, 'text/plain')
-        self.assertStatus(resp2, 204)
-        self.assertDataEquals(resp2, '')
+        not_empty = {
+            'empty dict': make_response({}),
+            'empty list': make_response([]),
+            'false': make_response(False),
+        }
+
+        for key, resp in are_empty.items():
+            self.assertContentType(resp, 'text/plain')
+            self.assertStatus(resp, 204)
+            self.assertDataEquals(resp, '')
+
+        for key, resp in not_empty.items():
+            self.assertStatusNot(resp, 204, '%s should not be empty' % key)
 
     def test_status(self):
         resp = make_response(('', 123))

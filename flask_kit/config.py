@@ -21,7 +21,10 @@ class ConfigHandler(object):
         self.open = open
         self.isfile = isfile
         self.logger = logger
-        self.default_paths = [os.environ.get('HOME'), '.']
+        self.default_paths = [
+            os.environ.get('HOME'),
+            '.',
+        ]
 
     def add_path(self, path):
         self.default_paths.append(path)

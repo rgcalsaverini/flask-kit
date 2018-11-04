@@ -1,5 +1,9 @@
+from functools import wraps
+
 from cerberus import Validator
 from flask import request as flask_request
+
+from flask_kit.json_formatter import make_response
 
 
 def make_error(error, status=400):
@@ -60,7 +64,8 @@ class Router(object):
                  decorator=None,
                  document_routes=True,
                  request=flask_request,
-                 data_key='data'):
+                 data_key='data',
+                 as_json=True):
         self.decorator = decorator
         self.blueprint = blueprint
         self.bp_name = self.blueprint.name
@@ -68,12 +73,13 @@ class Router(object):
         self.routes = {}
         self.request = request
         self.document_routes = document_routes
+        self.as_json = as_json
 
         if document_routes:
             self._add_documentation_route()
 
     def _documentation_view(self):
-        return self.routes
+        return make_response(self.routes)
 
     def _add_documentation_route(self):
         endpoint = '%s_documentation' % self.bp_name
@@ -84,6 +90,15 @@ class Router(object):
             view_func=self._documentation_view,
             methods=['GET', 'OPTIONS']
         )
+
+    def _response_decorator(self, f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if self.as_json:
+                return make_response(f(*args, **kwargs))
+            return f(*args, **kwargs)
+
+        return decorated
 
     def _document_route(self, view, rule, method, endpoint, cerberus_schema):
         full_rule = '/{}{}'.format(self.blueprint.url_prefix.strip('/'), rule)
@@ -122,12 +137,16 @@ class Router(object):
             rule = '/%s' % rule_path.strip('/')
             validator = Validator(validate) if validate else None
 
-            def decorated(*args, **kwargs):
+            @self._response_decorator
+            def decorated_route(*args, **kwargs):
                 new_kwargs = {}
                 if validator:
                     input_json = self.request.get_json(silent=True, force=True)
                     if not validator.validate(input_json or {}):
-                        return make_error(validator.errors)
+                        response = make_error(validator.errors)
+                        if self.as_json:
+                            return response
+                        return response
                     new_kwargs[self.data_key] = validator.document
 
                 full_kwargs = {**kwargs, **new_kwargs}
@@ -140,14 +159,14 @@ class Router(object):
             self.blueprint.add_url_rule(
                 rule=rule,
                 endpoint=endpoint,
-                view_func=decorated,
+                view_func=decorated_route,
                 methods=[method]
             )
 
             if document and self.document_routes:
                 self._document_route(f, rule, method, endpoint, validate)
 
-            return decorated
+            return decorated_route
 
         return inner
 

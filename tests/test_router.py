@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import MagicMock
 
@@ -5,9 +6,19 @@ from flask_kit import Router
 
 
 # TODO: Cover help route better, and individual help routes on options
+# TODO: Test if routes are always encoded JSON
 
-class TestRouter(unittest.TestCase):
-    def test_empty(self):
+class RouterTestCase(unittest.TestCase):
+    def assertIsJson(self, value):
+        self.assertIsInstance(value, str)
+        try:
+            json.loads(value)
+        except ValueError as e:
+            self.fail('Invalid JSON: %s' % str(e))
+
+
+class TestRouter(RouterTestCase):
+    def test_no_routes(self):
         blueprint = FakeBlueprint()
         Router(blueprint)
         self.assertEquals(blueprint.add_url_rule.call_count, 1)
@@ -15,12 +26,14 @@ class TestRouter(unittest.TestCase):
 
         view_func = blueprint.add_url_rule.call_args_list[0][1]['view_func']
         rule = blueprint.add_url_rule.call_args_list[0][1]['rule']
-        self.assertEquals(view_func(), {})
+        res = view_func()
+        self.assertIsJson(res[0])
+        self.assertEquals(json.loads(res[0]), {})
         self.assertEquals(rule, '')
 
     def test_simple_routes(self):
         blueprint = FakeBlueprint()
-        router = Router(blueprint)
+        router = Router(blueprint, as_json=False)
 
         @router.get('route')
         def route():
@@ -36,7 +49,7 @@ class TestRouter(unittest.TestCase):
 
     def test_validate_valid(self):
         blueprint = FakeBlueprint()
-        router = Router(blueprint, request=FakeRequest({}))
+        router = Router(blueprint, request=FakeRequest({}), as_json=False)
 
         @router.post('/my/route', validate={
             'test': {
@@ -55,7 +68,9 @@ class TestRouter(unittest.TestCase):
 
     def test_validate_invalid(self):
         blueprint = FakeBlueprint()
-        router = Router(blueprint, request=FakeRequest({'test': -1}))
+        router = Router(blueprint,
+                        request=FakeRequest({'test': -1}),
+                        as_json=False)
 
         @router.post('/my/route', validate={
             'test': {
@@ -70,7 +85,7 @@ class TestRouter(unittest.TestCase):
             return data['test']
 
         res = my_route()
-        self.assertIs(res[0]['success'], False)
+        self.assertIs(res[0]['success'], False, res)
 
 
 class FakeBlueprint(object):

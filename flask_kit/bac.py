@@ -3,39 +3,42 @@ from functools import wraps
 
 class BasicAccessControl(object):
     """
-        :param get_permissions: Should provide a method that returns a list
-            with the valid activities of of the accessing user.
+    Provides basic access control functionality.
+
+    :param get_permissions: a callback that returns a list of permission flags
+                            for the current user
+    :param denied: custom response on access denied. Optional.
+
+    Example usage:
+    >>> access = BasicAccessControl(get_user_permissions)
+    >>>
+    >>> @access.allow('admin')
+    >>> def admin():
+    >>>     return 'Hi admin'
+    >>>
+    >>> @access.allow(['HR', 'manager'], 'admin', 'director')
+    >>> def manage_salaries():
+    >>>     return 'salaries'
+    >>>
+    >>> @access.deny('external')
+    >>> def route():
+    >>>     return 'route'
     """
+
     default_denied_response = {'error': 'access_denied'}, 403
 
     def __init__(self, get_permissions, denied=None):
+
         self._get_permissions = get_permissions
         self._custom_denied = denied
 
-    def _denied(self):
-        if self._custom_denied:
-            return self._custom_denied()
-        return BasicAccessControl.default_denied_response
-
-    def _check_permissions(self, permissions, match, no_match):
-        user_perm = self._get_permissions()
-        for perm in permissions:
-            perm_list = perm if isinstance(perm, list) else [perm]
-            common = [p in user_perm for p in perm_list]
-            if all(common):
-                return match()
-        return no_match()
-
-    def _f_with_perm(self, f, args, kwargs, arg_name):
-        def with_permissions():
-            if not arg_name:
-                return f(*args, **kwargs)
-            user_perm = self._get_permissions()
-            return f(*args, **{**kwargs, arg_name: user_perm})
-
-        return with_permissions
-
     def allow(self, *permissions, arg_name=None):
+        """
+
+        :param permissions:
+        :param arg_name:
+        :return:
+        """
         def inner(f):
             @wraps(f)
             def decorated(*args, **kwargs):
@@ -72,3 +75,26 @@ class BasicAccessControl(object):
             return decorated
 
         return inner
+
+    def _denied(self):
+        if self._custom_denied:
+            return self._custom_denied()
+        return BasicAccessControl.default_denied_response
+
+    def _check_permissions(self, permissions, match, no_match):
+        user_perm = self._get_permissions()
+        for perm in permissions:
+            perm_list = perm if isinstance(perm, list) else [perm]
+            common = [p in user_perm for p in perm_list]
+            if all(common):
+                return match()
+        return no_match()
+
+    def _f_with_perm(self, f, args, kwargs, arg_name):
+        def with_permissions():
+            if not arg_name:
+                return f(*args, **kwargs)
+            user_perm = self._get_permissions()
+            return f(*args, **{**kwargs, arg_name: user_perm})
+
+        return with_permissions
