@@ -19,12 +19,12 @@ def encode_datetime(obj, with_time):
 
 class Encoder(json.JSONEncoder):
     def default(self, obj):
-        to_json = getattr(obj.__class__, "to_json", None)
-        if to_json:
-            return json.loads(obj.to_json())
         to_dict = getattr(obj.__class__, "to_dict", None)
         if to_dict:
             return obj.to_dict()
+        to_json = getattr(obj.__class__, "to_json", None)
+        if to_json:
+            return json.loads(obj.to_json())
         if isinstance(obj, datetime.datetime):
             return encode_datetime(obj, True)
         if isinstance(obj, datetime.date):

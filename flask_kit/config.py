@@ -1,12 +1,12 @@
-import json
 import logging
 import os
 from os.path import isfile
 
+import yaml
 from cytoolz.dicttoolz import merge
 
 
-def get_configs(defaults=None, filename='configs.json'):
+def get_configs(defaults=None, filename='configs.yaml'):
     """
     Get configs
     """
@@ -44,7 +44,7 @@ class ConfigHandler(object):
             valid_paths = filter(lambda p: p and self.isfile(p), search_paths)
             file_path = next(valid_paths)
             with self.open(file_path, 'r') as f:
-                loaded = json.loads(f.read())
+                loaded = yaml.load(f.read())
                 config = merge(config, loaded)
         except Exception:
             self.logger.error(
@@ -93,3 +93,4 @@ class AppConfig(object):
         app.config.update(self.configs.get('flask', {}))
         if app.config.get('SECRET_KEY', None) is None:
             app.config['SECRET_KEY'] = random_secret_key()
+

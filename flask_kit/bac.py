@@ -33,12 +33,6 @@ class BasicAccessControl(object):
         self._custom_denied = denied
 
     def allow(self, *permissions, arg_name=None):
-        """
-
-        :param permissions:
-        :param arg_name:
-        :return:
-        """
         def inner(f):
             @wraps(f)
             def decorated(*args, **kwargs):
