@@ -5,7 +5,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='flask-kit',
-    version='0.0.1',
+    version='0.0.2',
     url='https://gitlab.com/rgcalsaverini/flask-kit',
     author='Rui Calsaverini',
     author_email='rui.calsaverini',
