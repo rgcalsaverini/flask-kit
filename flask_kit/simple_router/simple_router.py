@@ -222,20 +222,24 @@ class Selector(object):
         """
         final_filter = self.list_obj()
         for key in self.request.args.keys():
-            if not key or only is not None and key not in only:
+            if not key or (only is not None and key not in only):
                 continue
-            for arg in self.request.args.getlist(key):
-
-                final_key = (mapping or dict()).get(key, key)
-                op, value = qualified_value(arg, self.filter_ops, True, 'eq')
-                if op in ['in', 'nin']:
-                    value = [v.strip() for v in value.split(',') if v.strip()]
-                final_filter.append({
-                    'field': final_key,
-                    'op': op,
-                    'value': value,
-                })
+            final_filter.extend(self._add_filter_key(key, mapping))
         return final_filter
+
+    def _add_filter_key(self, key, mapping):
+        filters = []
+        for arg in self.request.args.getlist(key):
+            final_key = (mapping or dict()).get(key, key)
+            op, value = qualified_value(arg, self.filter_ops, True, 'eq')
+            if op in ['in', 'nin']:
+                value = [v.strip() for v in value.split(',') if v.strip()]
+            filters.append({
+                'field': final_key,
+                'op': op,
+                'value': value,
+            })
+        return filters
 
     def sort(self, only=None, mapping=None):
         final_sorting = list()
@@ -244,7 +248,7 @@ class Selector(object):
             return {}
         sort_keys = sort_val.split(',')
         for key in sort_keys:
-            if not key or only is not None and key not in only:
+            if not key or (only is not None and key not in only):
                 continue
             s_dir, val = qualified_value(key, self.sort_dir, False, 'desc')
             final_key = (mapping or dict()).get(val, val)

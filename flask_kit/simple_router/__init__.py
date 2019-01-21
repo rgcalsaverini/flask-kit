@@ -1,1 +1,1 @@
-from .simple_router import Router, Selector
+from .simple_router import Router, Selector, make_error
