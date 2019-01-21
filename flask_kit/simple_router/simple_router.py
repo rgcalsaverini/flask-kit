@@ -7,8 +7,6 @@ from functools import wraps
 
 from cerberus import Validator
 from flask import request as flask_request
-from mongoengine import Document
-from mongoengine.queryset import QuerySet
 
 from flask_kit.json_formatter import make_response
 
@@ -117,62 +115,6 @@ class Router(object):
         if cerberus_schema:
             self.routes[full_rule][method]['parameters'] = cerberus_schema
 
-    def doc_read(self, document, rule):
-        def inner(f):
-            def common():
-                if self.decorator:
-                    res = self.decorator(f)
-                else:
-                    res = f()
-                if res is None:
-                    return {}
-                return res
-
-            def view_list():
-                limit = max(1, min(self.max_page, self.selector.limit()))
-                offset = max(0, self.selector.offset())
-                filters = self.selector.filter()
-                extra_filters = common()
-
-                query = filters.apply_mongo(document).object(**extra_filters)
-                res = query.limit(limit).skip(offset).all()
-
-                return {
-                    'items': res,
-                    'links': {}
-                }
-
-            def view_details(doc_id):
-                extra_filters = common()
-                res = document.object(id=doc_id, **extra_filters).first()
-                if not res:
-                    msg = "entry with id '{}' not found on '{}'"
-                    return make_error(msg.format(doc_id, document.__name__))
-                return res
-
-            view_name = f.__name__
-            list_endpoint = '%s_%s_list' % (self.bp_name, view_name)
-            detail_endpoint = '%s_%s_detail' % (self.bp_name, view_name)
-
-            self.blueprint.add_url_rule(
-                rule=rule,
-                endpoint=list_endpoint,
-                view_func=view_list,
-                methods=['GET']
-            )
-            self.blueprint.add_url_rule(
-                rule='%s/<doc_id>' % rule,
-                endpoint=detail_endpoint,
-                view_func=view_details,
-                methods=['GET']
-            )
-
-            if document and self.document_routes:
-                self._document_route(f, rule, ['GET'], list_endpoint, None)
-                self._document_route(f, rule, ['GET'], detail_endpoint, None)
-
-        return inner
-
     def route(self,
               rule_path: str,
               method: str,
@@ -201,8 +143,6 @@ class Router(object):
                     input_json = get_json(self.request)
                     if not validator.validate(input_json or {}):
                         response = make_error(validator.errors)
-                        if self.as_json:
-                            return response
                         return response
                     new_kwargs[self.data_key] = validator.document
 
@@ -251,51 +191,13 @@ def get_json(request):
     return res
 
 
-class FilterList(list):
-    def apply_mongo(self, doc_or_query, doc_cls=Document, query_cls=QuerySet):
-        """
-        Apply filter to a mongo document (creating a query) or to
-        a queryset (filtering it). Returns the queryset
-        """
-        mongo_kwargs = dict()
-        mongo_ops = {
-            'eq': '',
-            'ne': '__ne',
-            'lt': '__lt',
-            'gt': '__gt',
-            'ge': '__gte',
-            'le': '__lte',
-            'not': '__not',
-            'in': '__in',
-            'nin': '__nin',
-        }
-
-        if isinstance(doc_or_query, doc_cls):
-            document = doc_or_query
-        elif isinstance(doc_or_query, query_cls):
-            document = doc_or_query._document
-        else:
-            raise TypeError()
-
-        for item in self:
-            doc_field = getattr(document, item['field'])
-            if doc_field:
-                value = doc_field.to_python(item['value'])
-            else:
-                value = item['value']
-            arg = '{}{}'.format(item['field'], mongo_ops[item['op']])
-            mongo_kwargs[arg] = value
-        if isinstance(doc_or_query, doc_cls):
-            return doc_or_query.objects(**mongo_kwargs)
-        return doc_or_query.filter(**mongo_kwargs)
-
-
 class Selector(object):
     filter_ops = ['eq', 'in', 'nin', 'lt', 'le', 'gt', 'ge', 'ne', 'not']
     sort_dir = ['asc', 'desc']
 
-    def __init__(self, request_obj=flask_request):
+    def __init__(self, list_obj=None, request_obj=flask_request):
         self.request = request_obj
+        self.list_obj = list_obj or list
 
     def limit(self):
         """ Returns the limit as an integer or None """
@@ -306,9 +208,9 @@ class Selector(object):
 
     def offset(self):
         """ Returns the offset as an integer or None """
-        marker_value = self.request.args.get('marker', '')
-        if is_non_neg_int(marker_value):
-            return int(marker_value)
+        offset_value = self.request.args.get('offset', None)
+        if is_non_neg_int(offset_value):
+            return int(offset_value)
         return None
 
     def filter(self, only=None, mapping=None):
@@ -318,11 +220,12 @@ class Selector(object):
         /users?gender=male&age=23
         /products?category=in:computers,tvs&price=gt:10.00&price=lt:100.00
         """
-        final_filter = FilterList()
+        final_filter = self.list_obj()
         for key in self.request.args.keys():
+            if not key or only is not None and key not in only:
+                continue
             for arg in self.request.args.getlist(key):
-                if only is not None and key not in only:
-                    continue
+
                 final_key = (mapping or dict()).get(key, key)
                 op, value = qualified_value(arg, self.filter_ops, True, 'eq')
                 if op in ['in', 'nin']:
@@ -335,20 +238,20 @@ class Selector(object):
         return final_filter
 
     def sort(self, only=None, mapping=None):
-        final_sorting = dict()
+        final_sorting = list()
         sort_val = self.request.args.get('sort', None)
         if not sort_val:
             return {}
         sort_keys = sort_val.split(',')
         for key in sort_keys:
-            if only is not None and key not in only:
+            if not key or only is not None and key not in only:
                 continue
-            final_key = (mapping or dict()).get(key, key)
             s_dir, val = qualified_value(key, self.sort_dir, False, 'desc')
-            final_sorting[final_key] = {
+            final_key = (mapping or dict()).get(val, val)
+            final_sorting.append({
+                'field': final_key,
                 'direction': s_dir,
-                'value': val,
-            }
+            })
         return final_sorting
 
 

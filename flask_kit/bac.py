@@ -1,6 +1,25 @@
 from functools import wraps
 
 
+def _check_permissions(permissions, match, no_match, user_perm):
+    for perm in permissions:
+        perm_list = perm if isinstance(perm, list) else [perm]
+        common = [p in user_perm for p in perm_list]
+        if all(common):
+            return match()
+    return no_match()
+
+
+def _f_perm(f, args, kwargs, arg_name, user_perm):
+    """ Function f with added permissions argument, if provided """
+    def with_permissions():
+        if not arg_name:
+            return f(*args, **kwargs)
+        return f(*args, **{**kwargs, arg_name: user_perm})
+
+    return with_permissions
+
+
 class BasicAccessControl(object):
     """
     Provides basic access control functionality.
@@ -28,7 +47,6 @@ class BasicAccessControl(object):
     default_denied_response = {'error': 'access_denied'}, 403
 
     def __init__(self, get_permissions, denied=None):
-
         self._get_permissions = get_permissions
         self._custom_denied = denied
 
@@ -36,10 +54,12 @@ class BasicAccessControl(object):
         def inner(f):
             @wraps(f)
             def decorated(*args, **kwargs):
-                return self._check_permissions(
+                user_perm = self._get_permissions()
+                return _check_permissions(
                     permissions,
-                    match=self._f_with_perm(f, args, kwargs, arg_name),
+                    match=_f_perm(f, args, kwargs, arg_name, user_perm),
                     no_match=self._denied,
+                    user_perm=user_perm
                 )
 
             return decorated
@@ -50,10 +70,12 @@ class BasicAccessControl(object):
         def inner(f):
             @wraps(f)
             def decorated(*args, **kwargs):
-                return self._check_permissions(
+                user_perm = self._get_permissions()
+                return _check_permissions(
                     permissions,
                     match=self._denied,
-                    no_match=self._f_with_perm(f, args, kwargs, arg_name),
+                    no_match=_f_perm(f, args, kwargs, arg_name, user_perm),
+                    user_perm=user_perm
                 )
 
             return decorated
@@ -64,7 +86,8 @@ class BasicAccessControl(object):
         def inner(f):
             @wraps(f)
             def decorated(*args, **kwargs):
-                return self._f_with_perm(f, args, kwargs, arg_name)()
+                user_perm = self._get_permissions()
+                return _f_perm(f, args, kwargs, arg_name, user_perm)()
 
             return decorated
 
@@ -74,21 +97,3 @@ class BasicAccessControl(object):
         if self._custom_denied:
             return self._custom_denied()
         return BasicAccessControl.default_denied_response
-
-    def _check_permissions(self, permissions, match, no_match):
-        user_perm = self._get_permissions()
-        for perm in permissions:
-            perm_list = perm if isinstance(perm, list) else [perm]
-            common = [p in user_perm for p in perm_list]
-            if all(common):
-                return match()
-        return no_match()
-
-    def _f_with_perm(self, f, args, kwargs, arg_name):
-        def with_permissions():
-            if not arg_name:
-                return f(*args, **kwargs)
-            user_perm = self._get_permissions()
-            return f(*args, **{**kwargs, arg_name: user_perm})
-
-        return with_permissions

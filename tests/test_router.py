@@ -23,11 +23,10 @@ class RouterTestCase(unittest.TestCase):
 
 class TestSelector(unittest.TestCase):
     def test_empty(self):
-        s = Selector(FakeRequest())
+        s = Selector(request_obj=FakeRequest())
         self.assertEquals(s.filter(), [])
         self.assertEquals(s.sort(), {})
         self.assertIsNone(s.limit())
-        # self.assertIsNone(s.marker())
 
     def test_limit(self):
         limits = {
@@ -42,24 +41,80 @@ class TestSelector(unittest.TestCase):
         }
 
         for lim, res in limits.items():
-            s = Selector(FakeRequest(args=lim))
+            s = Selector(request_obj=FakeRequest(args=lim))
             self.assertEquals(s.limit(), res)
 
-    # def test_marker(self):
-    #     markers = {
-    #         'marker=': None,
-    #         'marker=%20': None,
-    #         'marker=%20%20': None,
-    #         'marker=TEST': 'TEST',
-    #         'marker=1': '1',
-    #         'marker=0fb6300ac4a': '0fb6300ac4a',
-    #     }
-    #
-    #     for marker, res in markers.items():
-    #         s = Selector(FakeRequest(args=marker))
-    #         self.assertEquals(s.marker(), res)
+    def test_offset(self):
+        offsets = {
+            'offset=0': 0,
+            'offset=1': 1,
+            'offset=10': 10,
+            'offset=12345678': 12345678,
+            'offset=-1': None,
+            'offset=a': None,
+            'offset=': None,
+            'offset=TEST': None,
+        }
 
-    def test_filter(self):  # todo add not a qualifier
+        for offset, res in offsets.items():
+            s = Selector(request_obj=FakeRequest(args=offset))
+            self.assertEquals(s.offset(), res)
+
+    def test_sort(self):
+        args = [
+            ('sort=a', [{'field': 'a', 'direction': 'desc'}]),
+            ('sort=a:desc', [{'field': 'a', 'direction': 'desc'}]),
+            ('sort=a:asc', [{'field': 'a', 'direction': 'asc'}]),
+            ('sort=asc:a', [{'field': 'asc:a', 'direction': 'desc'}]),
+            ('sort=a:invalid', [{'field': 'a:invalid', 'direction': 'desc'}]),
+            ('sort=a, b,', [
+                {'field': 'a', 'direction': 'desc'},
+                {'field': 'b', 'direction': 'desc'},
+            ]),
+            ('sort=a,b:asc,c:desc,d,e:nothing,f:asc', [
+                {'field': 'a', 'direction': 'desc'},
+                {'field': 'b', 'direction': 'asc'},
+                {'field': 'c', 'direction': 'desc'},
+                {'field': 'd', 'direction': 'desc'},
+                {'field': 'e:nothing', 'direction': 'desc'},
+                {'field': 'f', 'direction': 'asc'},
+            ]),
+        ]
+
+        def sort_list(el):
+            return '{}{}'.format(el['field'], el['direction'])
+
+        for sort_arg, res in args:
+            s = Selector(request_obj=FakeRequest(args=sort_arg))
+            self.assertListEqual(
+                sorted(s.sort(), key=sort_list),
+                sorted(res, key=sort_list)
+            )
+
+    def test_sort_only(self):
+        args = [
+            ('sort=a,b,c', ['a'], ['a']),
+            ('sort=a,b,c', ['a', 'b'], ['a', 'b']),
+            ('sort=a', ['a', 'b'], ['a']),
+        ]
+        for arg, only, expected in args:
+            s = Selector(request_obj=FakeRequest(args=arg))
+            received = [f['field'] for f in s.sort(only=only)]
+            self.assertListEqual(sorted(received), sorted(expected))
+
+    def test_filter_only(self):
+        args = [
+            ('key1=1&key2=2&key3', ['key1'], ['key1']),
+            ('key1&key2=le:2&key3', ['key1', 'key2'], ['key1', 'key2']),
+            ('key1', ['key1', 'key2'], ['key1']),
+        ]
+        for arg, only, expected in args:
+            s = Selector(request_obj=FakeRequest(args=arg))
+            received = [f['field'] for f in s.filter(only=only)]
+            print(arg)
+            self.assertListEqual(sorted(received), sorted(expected))
+
+    def test_filter(self):
         filters = [
             (
                 'key_1=1&key_2=%202&key_3=3%20&key_4=%204%20&key_5= eq :  5  ',
@@ -111,7 +166,7 @@ class TestSelector(unittest.TestCase):
             ),
         ]
 
-        def sort_filter_list(el):
+        def sort_list(el):
             if isinstance(el['value'], list):
                 value = ','.join(sorted(el['value']))
             else:
@@ -119,11 +174,10 @@ class TestSelector(unittest.TestCase):
             return '{}{}{}'.format(el['field'], el['op'], value)
 
         for filt, res in filters:
-            print(filt)
-            s = Selector(FakeRequest(args=filt))
+            s = Selector(request_obj=FakeRequest(args=filt))
             self.assertListEqual(
-                sorted(s.filter(), key=sort_filter_list),
-                sorted(res, key=sort_filter_list)
+                sorted(s.filter(), key=sort_list),
+                sorted(res, key=sort_list)
             )
 
 
@@ -156,6 +210,12 @@ class TestRouter(RouterTestCase):
         self.assertEquals(route(), 'route')
         call_2 = blueprint.add_url_rule.call_args_list[1][1]
         self.assertEquals(call_2['rule'], '/route')
+
+    def test_invalid_method(self):
+        blueprint = FakeBlueprint()
+        router = Router(blueprint, as_json=False)
+        with self.assertRaises(AttributeError):
+            router.not_valid_method('route')
 
     def test_validate_valid(self):
         blueprint = FakeBlueprint()
@@ -196,6 +256,18 @@ class TestRouter(RouterTestCase):
 
         res = my_route()
         self.assertIs(res[0]['success'], False, res)
+
+    # def test_decorator(self):
+    #     decorator = MagicMock()
+    #     blueprint = FakeBlueprint()
+    #     router = Router(blueprint,
+    #                     request=FakeRequest({'test': -1}),
+    #                     as_json=False,
+    #                     decorator=decorator)
+    #
+    #     @router.get('deco')
+    #     def route():
+    #         return 'deco'
 
 
 class FakeBlueprint(object):

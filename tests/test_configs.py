@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from flask import Flask
 
-from flask_kit.config import ConfigHandler, DotDict, AppConfig
+from flask_kit.config import ConfigHandler, DotDict, AppConfig, get_configs
 from tests.utils import FakeOpen
 
 
@@ -72,6 +72,11 @@ class TestConfig(unittest.TestCase):
         defaults = {'aaa': 1}
         config = _create_config(isfile=lambda *_: False)
         self.assertDictEqual(defaults, config.load(defaults))
+
+    def test_factory(self):
+        handler = MagicMock()
+        get_configs(cls=handler)
+        self.assertEquals(handler.call_count, 1)
 
 
 class TestFlaskConfig(unittest.TestCase):

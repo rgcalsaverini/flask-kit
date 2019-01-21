@@ -6,15 +6,6 @@ import yaml
 from cytoolz.dicttoolz import merge
 
 
-def get_configs(defaults=None, filename='configs.yaml'):
-    """
-    Get configs
-    """
-    handler = ConfigHandler(filename)
-    config = handler.load(defaults)
-    return config
-
-
 class ConfigHandler(object):
     def __init__(self, config_path, open=open, isfile=isfile, logger=logging):
         self.config_path = config_path
@@ -76,7 +67,7 @@ class DotDict(dict):
 
 
 def random_secret_key():
-    return os.urandom(1000).decode('utf-16', 'ignore')[:128]
+    return os.urandom(256)
 
 
 class AppConfig(object):
@@ -94,3 +85,11 @@ class AppConfig(object):
         if app.config.get('SECRET_KEY', None) is None:
             app.config['SECRET_KEY'] = random_secret_key()
 
+
+def get_configs(defaults=None, filename='configs.yaml', cls=ConfigHandler):
+    """
+    Get configs
+    """
+    handler = cls(filename)
+    config = handler.load(defaults)
+    return config
