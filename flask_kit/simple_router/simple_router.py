@@ -84,7 +84,7 @@ class Router(object):
         endpoint = '%s_documentation' % self.bp_name
 
         self.blueprint.add_url_rule(
-            rule='',
+            rule='/',
             endpoint=endpoint,
             view_func=self._documentation_view,
             methods=['GET', 'OPTIONS']
@@ -100,7 +100,9 @@ class Router(object):
         return decorated
 
     def _document_route(self, view, rule, method, endpoint, cerberus_schema):
-        full_rule = '/{}{}'.format(self.blueprint.url_prefix.strip('/'), rule)
+        prefix = '/%s' % (self.blueprint.url_prefix or '').strip('/')
+        with_prefix = '{}/{}'.format(prefix, (rule or '').strip('/'))
+        full_rule = '/%s' % with_prefix.strip('/')
 
         if full_rule not in self.routes.keys():
             self.routes[full_rule] = {}

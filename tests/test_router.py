@@ -21,6 +21,92 @@ class RouterTestCase(unittest.TestCase):
             self.fail('Invalid JSON: %s' % str(e))
 
 
+class TestRouteDoc(unittest.TestCase):
+    def test_route_names_no_prefix(self):
+        blueprint = FakeBlueprint()
+        router = Router(blueprint)
+
+        @router.get('route1')
+        def route1():
+            return 1
+
+        @router.get('/route2')
+        def route1():
+            return 1
+
+        names = sorted(router.routes.keys())
+        self.assertListEqual(names, ['/route1', '/route2'])
+
+    def test_route_names_slash_prefix(self):
+        blueprint = FakeBlueprint(url_prefix='/')
+        router = Router(blueprint)
+
+        @router.get('route1')
+        def route1():
+            return 1
+
+        @router.get('/route2')
+        def route1():
+            return 1
+
+        names = sorted(router.routes.keys())
+        self.assertListEqual(names, ['/route1', '/route2'])
+
+    def test_route_names_some_prefix(self):
+        blueprint = FakeBlueprint(url_prefix='/my/pref')
+        router = Router(blueprint)
+
+        @router.get('route1')
+        def route1():
+            return 1
+
+        @router.get('/route2')
+        def route1():
+            return 1
+
+        names = sorted(router.routes.keys())
+        self.assertListEqual(names, ['/my/pref/route1', '/my/pref/route2'])
+
+    def test_methods(self):
+        blueprint = FakeBlueprint()
+        router = Router(blueprint)
+
+        @router.get('route1')
+        def route1_get():
+            pass
+
+        @router.delete('route1')
+        def route1_delete():
+            pass
+
+        @router.post('route1')
+        def route1_post():
+            pass
+
+        @router.put('route2')
+        def route2_put():
+            pass
+
+        self.assertListEqual(sorted(router.routes['/route1'].keys()), ['DELETE', 'GET', 'POST'])
+        self.assertListEqual(sorted(router.routes['/route2'].keys()), ['PUT'])
+
+    def test_docstring(self):
+        blueprint = FakeBlueprint()
+        router = Router(blueprint)
+
+        @router.get('route1')
+        def route1():
+            """ route 1 help """
+            return 1
+
+        @router.post('route2')
+        def route1():
+            return 1
+
+        self.assertEquals(router.routes['/route1']['GET']['description'], 'route 1 help')
+        self.assertIsNone(router.routes['/route2']['POST']['description'])
+
+
 class TestSelector(unittest.TestCase):
     def test_empty(self):
         s = Selector(request_obj=FakeRequest())
@@ -186,14 +272,13 @@ class TestRouter(RouterTestCase):
         blueprint = FakeBlueprint()
         Router(blueprint)
         self.assertEquals(blueprint.add_url_rule.call_count, 1)
-        print()
 
         view_func = blueprint.add_url_rule.call_args_list[0][1]['view_func']
         rule = blueprint.add_url_rule.call_args_list[0][1]['rule']
         res = view_func()
         self.assertIsJson(res[0])
         self.assertEquals(json.loads(res[0]), {})
-        self.assertEquals(rule, '')
+        self.assertEquals(rule, '/')
 
     def test_simple_routes(self):
         blueprint = FakeBlueprint()
@@ -271,7 +356,7 @@ class TestRouter(RouterTestCase):
 
 
 class FakeBlueprint(object):
-    def __init__(self, name='bp_name', url_prefix=''):
+    def __init__(self, name='bp_name', url_prefix=None):
         self.name = name
         self.url_prefix = url_prefix
         self.add_url_rule = MagicMock()
